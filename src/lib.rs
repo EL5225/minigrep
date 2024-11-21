@@ -4,9 +4,9 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     let contents = fs::read_to_string(config.file_path)?;
 
     let result = if config.ignore_case {
-        search_case_insensitives(config.query, &contents)
+        search_case_insensitives(&config.query, &contents)
     } else {
-        search(config.query, &contents)
+        search(&config.query, &contents)
     };
 
     for line in result {
@@ -16,35 +16,48 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-pub struct Config<'a> {
-    pub query: &'a String,
-    pub file_path: &'a String,
+pub struct Config {
+    pub query: String,
+    pub file_path: String,
     pub ignore_case: bool,
 }
 
-impl<'a> Config<'a> {
-    pub fn build(args: &'a [String]) -> Result<Config<'a>, &'static str> {
-        if args.len() < 3 {
-            return Err("not enough arguments");
-        } else if args.len() > 4 {
-            return Err("too many arguments");
-        }
+impl Config {
+    pub fn build(mut args: impl Iterator<Item = String>) -> Result<Config, &'static str> {
+        args.next();
 
-        let query = &args[1];
-        let file_path = &args[2];
+        let query = match args.next() {
+            Some(arg) => arg,
+            None => return Err("Didn't get a query string"),
+        };
+
+        let file_path = match args.next() {
+            Some(arg) => arg,
+            None => return Err("Didn't get a file path"),
+        };
+
+        let ignore_case_flag = match args.next() {
+            Some(arg) => arg,
+            None => "None".to_string(),
+        };
+
         let ignore_case: bool;
 
-        if args.len() == 4 {
-            match args[3].as_str() {
-                "--ignore-case" => ignore_case = true,
-                _ => {
-                    return Err(
-                        "flag is not recognized, use --ignore-case for case insensitive search",
-                    )
-                }
-            }
+        if !ignore_case_flag.contains("--") && ignore_case_flag != "None" {
+            return Err("The third argument should be a flag argument. Use '--'");
+        } else if ignore_case_flag.contains("--") {
+            if ignore_case_flag == "--ignore-case" {
+                ignore_case = true
+            } else {
+                return Err("Unknown flag argument. The only available flag is '--ignore-case'");
+            };
         } else {
             ignore_case = false;
+        }
+
+        match args.next() {
+            Some(_) => return Err("Too many arguments"),
+            None => (),
         }
 
         Ok(Config {
@@ -56,28 +69,19 @@ impl<'a> Config<'a> {
 }
 
 pub fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
-    let mut results = Vec::new();
-
-    for line in contents.lines() {
-        if line.contains(query) {
-            results.push(line);
-        }
-    }
-
-    results
+    contents
+        .lines()
+        .filter(|line| line.contains(query))
+        .collect()
 }
 
 pub fn search_case_insensitives<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
     let query = query.to_lowercase();
-    let mut results = Vec::new();
 
-    for line in contents.lines() {
-        if line.to_lowercase().contains(&query) {
-            results.push(line);
-        }
-    }
-
-    results
+    contents
+        .lines()
+        .filter(|line| line.to_lowercase().contains(&query))
+        .collect()
 }
 
 #[cfg(test)]
